@@ -7,7 +7,6 @@ from ssl_neuron.datasets import build_dataloader
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', help='Path to config file.', type=str, default='./configs/config.json')
 
-
 def main(args):
     # load config
     config = json.load(open(args.config))

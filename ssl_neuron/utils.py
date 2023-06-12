@@ -214,9 +214,14 @@ def compute_eig_lapl_torch_batch(adj_matrix, pos_enc_dim=32):
     L = torch.eye(n, device=A.device)[None, ].repeat(b, 1, 1) - (N @ A) @ N
 
     # Eigenvectors
-    eig_val, eig_vec = torch.linalg.eigh(L)
-    eig_vec = torch.flip(eig_vec, dims=[2])
+    #eig_val, eig_vec = torch.linalg.eigh(L)
+    #eig_vec = torch.flip(eig_vec, dims=[2])
+    
+    eig_val, eig_vec = torch.lobpcg(L, k=32)
+
     pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
+    # take also smallest eig vectors
+    pos_enc_s = eig_vec[:, :, -pos_enc_dim:]
 
     if pos_enc.size(2) < pos_enc_dim:
         pos_enc = torch.cat([pos_enc, torch.zeros(pos_enc.size(0), pos_enc.size(1), pos_enc_dim - pos_enc.size(2), device=A.device)], dim=2)
@@ -364,7 +369,8 @@ def plot_neuron(neighbors, node_feats, ax1=0, ax2=1, soma_id=0, ax=None):
     for i, neigh in neighbors.items():
         for j in neigh:
             n1, n2 = node_feats[i], node_feats[j]
-            c = colors[np.argmax(n2[4:])]
+            c = colors[np.argmax(n2[0:])]
+            #c = colors[0]
             ax.plot([n1[ax1], n2[ax1]], [n1[ax2], n2[ax2]], color=c, linewidth=1)
 
     ax.scatter(node_feats[soma_id][ax1], node_feats[soma_id][ax2], color=colors[0], s=10, zorder=10)
@@ -384,3 +390,53 @@ def plot_tsne(z, labels, targets, colors=None):
                     color=colors[label])
     plt.legend(bbox_to_anchor=(1,1))
     plt.axis('off')
+
+def remove_axon(neighbors, features, soma_id, microns=False):
+    """ Removes all nodes and edges in graph marked as axons.
+    
+        Feature dimensions:
+            0 - 2: xyz coordinates
+            3: radius
+            4 - 7: One-hot encoding of compartment type:
+                4: soma
+                5: axon
+                6: dendrite
+                7: apical dendrite
+        
+        Args:
+            neighbors: Dict of node id mapping to the node's neighbors.
+            features: Node features (N x 8)
+            soma id: Soma node index (int)
+            microns: Boolean indicating whether the dataset is MICrONS.
+            
+        Returns:
+            neighbors: Updated neighbor dict without axon nodes.
+            features: Updated feature array without axon nodes (M x 8).
+            soma id: Updated soma node index.
+    """
+    # Get node indices corresponding to axon nodes.
+    if microns:
+        axon_mask = (features[:, 6] == 1)
+    else:
+        axon_mask = (features[:, 5] == 1)
+    axon_idcs = list(np.where(axon_mask)[0])      
+    
+    # Remove axon nodes from features.
+    features = features[~axon_mask]
+    
+    # Remove axon nodes from neighbors.
+    for key in axon_idcs:
+        del neighbors[key]
+        
+    for key in neighbors:
+        for n in list(neighbors[key]):
+            if n in axon_idcs:
+                neighbors[key].remove(n)
+
+    # Re-map node indices to go from 0 .. M
+    neighbors, old2new = remap_neighbors(neighbors)
+
+    # Remap soma index.
+    soma_id = old2new[soma_id]
+
+    return neighbors, features, soma_id

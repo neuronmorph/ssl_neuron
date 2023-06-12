@@ -1,12 +1,13 @@
 import torch
 import pickle
 import numpy as np
+import os
 from tqdm import tqdm
 from pathlib import Path
-from torch.multiprocessing import Manager
+# from torch.multiprocessing import Manager
 from torch.utils.data import Dataset, DataLoader
 
-from ssl_neuron.utils import subsample_graph, rotate_graph, jitter_node_pos, translate_soma_pos, get_leaf_branch_nodes, compute_node_distances, drop_random_branch, remap_neighbors, neighbors_to_adjacency_torch
+from ssl_neuron.utils import subsample_graph, rotate_graph, jitter_node_pos, translate_soma_pos, get_leaf_branch_nodes, compute_node_distances, drop_random_branch, remap_neighbors, neighbors_to_adjacency_torch, remove_axon
 
 
 class GraphDataset(Dataset):
@@ -16,7 +17,7 @@ class GraphDataset(Dataset):
     position is (0, 0, 0) and axons have been removed. Node positions
     are assumed to be in microns and y-axis is orthogonal to the pia.
     """
-    def __init__(self, config, mode='train', inference=False):
+    def __init__(self, config, mode='train', inference=False, storage=None):
 
         self.config = config
         self.mode = mode
@@ -31,54 +32,73 @@ class GraphDataset(Dataset):
         self.n_nodes = config['data']['n_nodes']
 
         # Load cell ids.
-        cell_ids = list(np.load(Path(data_path, f'{mode}_ids.npy')))
+        if storage==None or not os.path.exists(storage): 
+            #cell_ids = list(np.load(Path(data_path, f'{mode}_ids.npy')))
+            cell_ids = list(np.load(Path("/user/makhmet1/ssl_neuron/ssl_neuron/data_BBP/", f'{mode}_ids.npy'), allow_pickle=True))
+            #self.inference= True # added this because for some cell_id if len(features) >= self.n_nodes is not true, so I got only 614 samples not 616
+            # Load graphs.
+            # self.manager = Manager()
+            # self.cells = self.manager.dict()
+            self.cells = dict()
+            count = 0
+            for cell_id in tqdm(cell_ids):
+                # Adapt for datasets where this is not true.
+                # soma_id = 0
+                soma_id = int(np.load(Path('/usr/users/agecker/datasets/neuron_morphology_markram/skeletons/', str(cell_id), 'soma_id.npy')))
 
-        # Load graphs.
-        self.manager = Manager()
-        self.cells = self.manager.dict()
-        count = 0
-        for cell_id in tqdm(cell_ids):
-            # Adapt for datasets where this is not true.
-            soma_id = 0
+                features = np.load(Path(data_path, 'skeletons', str(cell_id), 'features.npy'))
 
-            features = np.load(Path(data_path, 'skeletons', str(cell_id), 'features.npy'))
-            with open(Path(data_path, 'skeletons', str(cell_id), 'neighbors.pkl'), 'rb') as f:
-                neighbors = pickle.load(f)
+                with open(Path(data_path, 'skeletons', str(cell_id), 'neighbors.pkl'), 'rb') as f:
+                    neighbors = pickle.load(f)
 
-            assert len(features) == len(neighbors)
-
-            if len(features) >= self.n_nodes or self.inference:
+                assert len(features) == len(neighbors)
                 
-                # Subsample graphs for faster processing during training.
-                neighbors, not_deleted = subsample_graph(neighbors=neighbors, 
-                                                         not_deleted=set(range(len(neighbors))), 
-                                                         keep_nodes=1000, 
-                                                         protected=[soma_id])
-                # Remap neighbor indices to 0..999.
-                neighbors, subsampled2new = remap_neighbors(neighbors)
-                soma_id = subsampled2new[soma_id]
+                #Remove axon
+                neighbors, features, soma_id = remove_axon(neighbors, features, soma_id)
 
-                # Accumulate features of subsampled nodes.
-                features = features[list(subsampled2new.keys())]
+                
 
-                leaf_branch_nodes = get_leaf_branch_nodes(neighbors)
-                # Using the distances we can infer the direction of an edge.
-                distances = compute_node_distances(soma_id, neighbors)
+                if len(features) >= self.n_nodes or self.inference:
+                    
+                    # Subsample graphs for faster processing during training.
+                    neighbors, not_deleted = subsample_graph(neighbors=neighbors, 
+                                                            not_deleted=set(range(len(neighbors))), 
+                                                            keep_nodes=1000, 
+                                                            protected=[soma_id])
+                    # Remap neighbor indices to 0..999.
+                    neighbors, subsampled2new = remap_neighbors(neighbors)
+                    soma_id = subsampled2new[soma_id]
+                    
+                    # Accumulate features of subsampled nodes.
+                    features = features[list(subsampled2new.keys()), :3]
+                    
+                    # Spatially normalize such that soma location is (0, 0, 0)
+                    features -= features[soma_id]
 
-                item = {
-                    'cell_id': cell_id,
-                    'features': features, 
-                    'neighbors': neighbors,
-                    'distances': distances,
-                    'soma_id': soma_id,
-                    'leaf_branch_nodes': leaf_branch_nodes,
-                }
+                    leaf_branch_nodes = get_leaf_branch_nodes(neighbors)
+                    # Using the distances we can infer the direction of an edge.
+                    distances = compute_node_distances(soma_id, neighbors)
 
-                self.cells[count] = item
-                count += 1
+                    item = {
+                        'cell_id': cell_id,
+                        'features': features, 
+                        'neighbors': neighbors,
+                        'distances': distances,
+                        'soma_id': soma_id,
+                        'leaf_branch_nodes': leaf_branch_nodes,
+                    }
+
+                    self.cells[count] = item
+                    count += 1
+            if storage is not None:
+                with open(storage, 'wb') as file:
+                    pickle.dump(self.cells, file, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(storage, 'rb') as file:
+                self.cells = pickle.load(file)
+        
 
         self.num_samples = len(self.cells)
-
     def __len__(self):
         return self.num_samples
 
@@ -142,7 +162,7 @@ class GraphDataset(Dataset):
 
         # Extract features of remaining nodes.
         new_features = features[not_deleted].copy()
-       
+        
         # Augment node position via rotation and jittering.
         new_features = self._augment_node_position(new_features)
 
@@ -150,7 +170,7 @@ class GraphDataset(Dataset):
     
     def __getsingleitem__(self, index): 
         cell = self.cells[index]
-        return cell['features'], cell['neighbors']
+        return cell['features'], cell['neighbors'], cell['cell_id'] #cell['soma_id']
     
     
     def __getitem__(self, index): 
@@ -159,22 +179,20 @@ class GraphDataset(Dataset):
         # Compute two different views through augmentations.
         features1, adj_matrix1 = self._augment(cell)
         features2, adj_matrix2 = self._augment(cell)
-
         return features1, features2, adj_matrix1, adj_matrix2
-    
 
 def build_dataloader(config, use_cuda=torch.cuda.is_available()):
 
     kwargs = {'num_workers':config['data']['num_workers'], 'pin_memory':True, 'persistent_workers': True} if use_cuda else {}
 
     train_loader = DataLoader(
-            GraphDataset(config, mode='train'),
+            GraphDataset(config, mode='train',storage = '/user/makhmet1/ssl_neuron/ssl_neuron/dset_train.pkl'),
             batch_size=config['data']['batch_size'], 
             shuffle=True, 
             drop_last=True,
             **kwargs)
 
-    val_dataset = GraphDataset(config, mode='val')
+    val_dataset = GraphDataset(config, mode='val', storage = '/user/makhmet1/ssl_neuron/ssl_neuron/dset_val.pkl')
     batch_size = val_dataset.num_samples if val_dataset.__len__() < config['data']['batch_size'] else config['data']['batch_size']
     val_loader = DataLoader(
             val_dataset,

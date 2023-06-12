@@ -6,16 +6,16 @@ with open("README.md", "r") as fh:
 
 
 install_requires = [
-    "allensdk",
-    "numpy",
-    "tqdm",
-    "seaborn",
-    "matplotlib",
-    "networkx==2.5",
-    "scipy==1.6.0",
-    "scikit-learn==0.24.1",
-    "torch==1.7.1",
-    "torchvision==0.8.2"
+#     "allensdk",
+#     "numpy",
+#     "tqdm",
+#     "seaborn",
+#     "matplotlib",
+#     "networkx==2.5",
+#     "scipy==1.6.0",
+#     "scikit-learn==0.24.1",
+#     "torch==1.13.1",
+#     "torchvision"
 ]
 
 

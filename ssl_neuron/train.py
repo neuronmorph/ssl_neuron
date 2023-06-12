@@ -3,9 +3,11 @@ import torch
 import torch.optim as optim
 from ssl_neuron.utils import AverageMeter, compute_eig_lapl_torch_batch
 
+from torch.profiler import profile, record_function, ProfilerActivity
+
 class Trainer(object):
     def __init__(self, config, model, dataloaders):
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
         self.config = config
         self.ckpt_dir = config['trainer']['ckpt_dir']
@@ -54,7 +56,22 @@ class Trainer(object):
     def _train_epoch(self, epoch):
         self.model.train()
         losses = AverageMeter()
+        print('Starting batch')
+        prof = torch.profiler.profile(
+                    activities=[
+        ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        #schedule=torch.profiler.schedule(wait=1, warmup=1, active=1),
+        #on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/mnist'),
+                record_shapes=True
+        #profile_memory=True,
+        #with_stack=True,
+        #with_flops=True,
+        #with_modules=True
+        )    
+        prof.start()
         for i, data in enumerate(self.train_loader, 0):
+            # f1_cpu, f2_cpu, a1, a2 = [x.float() for x in data]
+            # f1, f2, a1, a2 = f1_cpu.to(self.device, non_blocking=True), ...
             f1, f2, a1, a2 = [x.float().to(self.device, non_blocking=True) for x in data]
             n = a1.shape[0]
 
@@ -62,11 +79,16 @@ class Trainer(object):
             l1 = compute_eig_lapl_torch_batch(a1)
             l2 = compute_eig_lapl_torch_batch(a2)
             
+
+
+
+
             self.lr = self.set_lr()
             self.optimizer.zero_grad(set_to_none=True)
             
+            
             loss = self.model(f1, f2, a1, a2, l1, l2)
-
+            
             # optimize 
             loss.sum().backward()
             self.optimizer.step()
@@ -76,7 +98,9 @@ class Trainer(object):
             
             losses.update(loss.detach(), n)
             self.curr_iter += 1
-
+        prof.step()
+        prof.stop()
+        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
         print('Epoch {} | Loss {:.4f}'.format(epoch, losses.avg))
 
 

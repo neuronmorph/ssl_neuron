@@ -11,9 +11,9 @@
     },
     "data": {
         "class": "allen",
-        "path": "data/",
+        "path": "/usr/users/agecker/datasets/neuron_morphology_allen/",
         "n_nodes": 200,
-        "feat_dim": 8,
+        "feat_dim": 3,
         "batch_size": 64,
         "num_workers": 6,
         "jitter_var": 1,
@@ -23,12 +23,12 @@
     },
     "optimizer": {
         "lr": 0.0001,
-        "max_iter": 1000,
+        "max_iter": 100000,
         "exp_decay": 0.5
     },
     "trainer": {
         "ckpt_dir": "ssl_neuron/ckpts/",
-        "save_ckpt_every": 50,
+        "save_ckpt_every": 200,
         "seed": null
     }
 }
