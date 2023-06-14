@@ -7,7 +7,7 @@ import time
 
 class Trainer(object):
     def __init__(self, config, model, dataloaders):
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
         self.config = config
         self.ckpt_dir = config['trainer']['ckpt_dir']
@@ -81,11 +81,11 @@ class Trainer(object):
             #l2 = compute_eig_lapl_torch_batch(a2)
             
 
-            cd1 = pos_enc_from_eigvec_of_conductive_dist_matrix(f1_cpu, a1_cpu, self.device)
-            cd2 = pos_enc_from_eigvec_of_conductive_dist_matrix(f2_cpu, a2_cpu, self.device)
+            #cd1 = pos_enc_from_eigvec_of_conductive_dist_matrix(f1_cpu, a1_cpu, self.device)
+            #cd2 = pos_enc_from_eigvec_of_conductive_dist_matrix(f2_cpu, a2_cpu, self.device)
 
-            #ed1 = compute_eigvec_of_euclidean_dist_matrix(f1)
-            #ed2 = compute_eigvec_of_euclidean_dist_matrix(f2)
+            ed1 = compute_eigvec_of_euclidean_dist_matrix(f1)
+            ed2 = compute_eigvec_of_euclidean_dist_matrix(f2)
             
             # l1 = torch.cat((l1, cd1), dim=2)
             # l2 = torch.cat((l2, cd2), dim=2)
@@ -96,8 +96,11 @@ class Trainer(object):
             #l1 = torch.cat((l1, cd1, ed1), dim=0)
             #l2 = torch.cat((l2, cd2, ed2), dim=0)
 
-            l1 = cd1
-            l2 = cd2
+            #l1 = cd1
+            #l2 = cd2
+            
+            l1 = ed1
+            l2 = ed2
 
             eig_val1, eig_vec1 = torch.linalg.eigh(l1)
             eig_val2, eig_vec2 = torch.linalg.eigh(l2)

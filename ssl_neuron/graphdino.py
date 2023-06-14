@@ -184,8 +184,8 @@ class GraphTransformer(nn.Module):
         # Separate the input positional embeddings for conductive distance and lapPE
         #lapl, cond, eucl = torch.split(lapl, 128, dim=0) #128 is the combined batch size
         #lapl, cond, eucl = torch.split(lapl, 32, dim=2)
-        cond = lapl
-
+        #cond = lapl
+        eucl = lapl
         #pos_embedding_token = self.to_pos_embedding(lapl)
         #pos_embedding_cond_dist_token = self.to_pos_embedding(cond)
         #pos_embedding_eucl_dist_token = self.to_pos_embedding(eucl)
@@ -257,7 +257,8 @@ class GraphTransformer(nn.Module):
         #x += pos_embedding + pos_embedding_cond_dist + pos_embedding_pstep
         #x += pos_embedding + pos_embedding_cond_dist + pos_embedding_pstep + pos_embedding_eucl_dist + pos_embedding_node_degrees
         #x = torch.cat((node_feat, lapl, eucl, cond, pos_embedding_pstep_token), dim=2)
-        x = torch.cat((node_feat, cond), dim=2)
+        # x = torch.cat((node_feat, cond), dim=2)
+        x = torch.cat((node_feat, eucl), dim=2)
         x = self.PE(x)
         x = torch.cat((cls_tokens, x), dim=1)
         for block in self.blocks:
