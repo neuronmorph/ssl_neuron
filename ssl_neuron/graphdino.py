@@ -133,7 +133,7 @@ class GraphTransformer(nn.Module):
 
         self.to_pos_embedding = nn.Linear(pos_dim, dim)
         #self.to_pos_embedding = LinearNodeEncoder(dim)
-        #self.pstepPE =  PStepRWEncoding(p=3)
+        self.pstepPE =  PStepRWEncoding(p=3)
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(dim),
@@ -157,11 +157,23 @@ class GraphTransformer(nn.Module):
             nn.Linear(dim * 2, dim)
         )
 
+        inp_dim = 131 #131 is the resulting dimension after concatenating 32*4 eig vectors and 3 xyz coordinates
+        self.PE = nn.Sequential(
+            nn.Linear(inp_dim, inp_dim*2),
+            nn.GELU(),
+            nn.Linear(inp_dim*2, inp_dim*2),
+            nn.GELU(),
+            nn.Linear(inp_dim*2, inp_dim*2),
+            nn.GELU(),
+            nn.LayerNorm(inp_dim*2),
+            nn.Linear(inp_dim*2, pos_dim)
+        )
+
     def forward(self, node_feat, adj, lapl):
         B, N, _ = node_feat.shape
        # print(B,N,_)
         # Compute initial node embedding.
-        x = self.to_node_embedding(node_feat)
+        #x = self.to_node_embedding(node_feat)
         # print('node feat', node_feat.shape)
         #print('x node', x.shape)
         # print('adj:', adj.shape)
@@ -169,16 +181,18 @@ class GraphTransformer(nn.Module):
         # Compute positional encoding
 
         # Separate the input positional embeddings for conductive distance and lapPE
-        lapl, cond = torch.split(lapl, 32, dim=2)
+        lapl, cond, eucl = torch.split(lapl, 128, dim=0) #128 is the combined batch size
+        #lapl, cond, eucl = torch.split(lapl, 32, dim=2)
 
-        pos_embedding_token = self.to_pos_embedding(lapl)
-        pos_embedding_cond_dist_token = self.to_pos_embedding(cond)
+        #pos_embedding_token = self.to_pos_embedding(lapl)
+        #pos_embedding_cond_dist_token = self.to_pos_embedding(cond)
+        #pos_embedding_eucl_dist_token = self.to_pos_embedding(eucl)
         #pos_embedding_token = self.to_pos_embedding(node_feat)
         
         
         #pos_embedding_token = self.to_pos_embedding(adj)
-       # print('pos token', pos_embedding_token.shape)
-        #pos_embedding_pstep_token = self.pstepPE.forward(x, adj)
+        # print('pos token', pos_embedding_token.shape)
+        pos_embedding_pstep_token = self.pstepPE.forward(node_feat, adj)
 
         # Compute positional embedding based on eigvecs of euclidean distance matrix
         #eucl_dist = compute_eigvec_of_euclidean_dist_matrix(node_feat)
@@ -214,19 +228,19 @@ class GraphTransformer(nn.Module):
         #pstepadj = pstep_adj(adj, p=3)
 
         # Add "classification" token
-        cls_pos_enc = self.cls_pos_embedding.repeat(B, 1, 1)
+        #cls_pos_enc = self.cls_pos_embedding.repeat(B, 1, 1)
 
-        pos_embedding = torch.cat((cls_pos_enc, pos_embedding_token), dim=1)
+        #pos_embedding = torch.cat((cls_pos_enc, pos_embedding_token), dim=1)
         #pos_embedding_pstep = torch.cat((cls_pos_enc, pos_embedding_pstep_token), dim=1)
         #pos_embedding_eucl_dist = torch.cat((cls_pos_enc, pos_embedding_eucl_dist_token), dim=1)
-        pos_embedding_cond_dist = torch.cat((cls_pos_enc, pos_embedding_cond_dist_token), dim=1)
+        #pos_embedding_cond_dist = torch.cat((cls_pos_enc, pos_embedding_cond_dist_token), dim=1)
         #print('pos embedding', pos_embedding.shape)
 
         #node_degrees = adj.sum(dim=2).unsqueeze(2).expand(-1, -1, 32) 
         #pos_embedding_node_degrees = torch.cat((cls_pos_enc, node_degrees), dim=1)
 
         cls_tokens = self.cls_token.repeat(B, 1, 1)
-        x = torch.cat((cls_tokens, x), dim=1)
+        #x = torch.cat((cls_tokens, x), dim=1)
 
         # Add classification token entry to adjanceny matrix. 
         adj_cls = torch.zeros(B, N + 1, N + 1, device=node_feat.device)
@@ -238,7 +252,12 @@ class GraphTransformer(nn.Module):
         #x += pos_embedding + pos_embedding_pstep + pos_embedding_eucl_dist + pos_embedding_node_degrees
         #x += pos_embedding + pos_embedding_node_degrees #+ pos_embedding_cond_dist
         #x += pos_embedding
-        x += pos_embedding + pos_embedding_cond_dist
+        #x += pos_embedding + pos_embedding_cond_dist
+        #x += pos_embedding + pos_embedding_cond_dist + pos_embedding_pstep
+        #x += pos_embedding + pos_embedding_cond_dist + pos_embedding_pstep + pos_embedding_eucl_dist + pos_embedding_node_degrees
+        x = torch.cat((node_feat, lapl, eucl, cond, pos_embedding_pstep_token), dim=2)
+        x = self.PE(x)
+        x = torch.cat((cls_tokens, x), dim=1)
         for block in self.blocks:
             x = block(x, adj_cls)
         x = x[:, 0]
@@ -378,23 +397,16 @@ class LinearNodeEncoder(nn.Module):
     def forward(self, batch):
         batch = self.encoder(batch)
         return batch   
-#Run on laplaciancs, node_feats might have a different dimension
 
-#from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix, to_dense_adj, dense_to_sparse
-import numpy as np
-import scipy.sparse as sp
-from scipy.sparse.linalg import expm
-import torch
-import networkx as nx
 
 class PStepRWEncoding(nn.Module):
-    def __init__(self, output_dim=32, hidden_dim=128, p=1, beta=0.5, use_edge_attr=False, normalization=None):
+    def __init__(self, output_dim=32, hidden_dim=128, p=1, use_edge_attr=False, normalization=None):
         super().__init__()
         self.p = p
-        self.beta = beta
         self.normalization = normalization
         self.use_edge_attr = use_edge_attr
-        input_dim = int(output_dim*p)
+        #input_dim = int(output_dim*p)
+        input_dim = int(3*p) # 3 because xyz 
         self.mlp = MLP_general(input_dim=input_dim, output_dim=output_dim, hidden_dim=hidden_dim).to(torch.device("cuda:7"))
 
     def forward(self, node_feat, adj): 
@@ -426,184 +438,5 @@ def pstep_adj(adj, p):
             c = c + cf[_] * tmp
     return c
 
-class KernelPENodeEncoder(nn.Module):
-    """Configurable kernel-based Positional Encoding node encoder.
-
-    The choice of which kernel-based statistics to use is configurable through
-    setting of `kernel_type`. Based on this, the appropriate config is selected,
-    and also the appropriate variable with precomputed kernel stats is then
-    selected from PyG Data graphs in `forward` function.
-    E.g., supported are 'RWSE', 'HKdiagSE', 'ElstaticSE'.
-
-    PE of size `dim_pe` will get appended to each node feature vector.
-    If `expand_x` set True, original node features will be first linearly
-    projected to (dim_emb - dim_pe) size and the concatenated with PE.
-
-    Args:
-        dim_emb: Size of final node embedding
-        expand_x: Expand node features `x` from dim_in to (dim_emb - dim_pe)
-    """
-
-    kernel_type = 'RWSE'  # Instantiated type of the KernelPE, e.g. RWSE
-
-    def __init__(self, dim_emb, expand_x=True):
-        super().__init__()
-        if self.kernel_type is None:
-            raise ValueError(f"{self.__class__.__name__} has to be "
-                             f"preconfigured by setting 'kernel_type' class"
-                             f"variable before calling the constructor.")
-
-        dim_in = 3  # Expected original input node features dim
-
-        dim_pe = dim_emb  # Size of the kernel-based PE embedding
-        num_rw_steps = 17 # RW steps, I assigned randomly to 17
-        model_type = 'linear'  # Encoder NN model type for PEs
-        n_layers = 1  # Num. layers in PE encoder model
-        norm_type = 'batchnorm'  # Raw PE normalization layer type
-        self.pass_as_var = False  # Pass PE also as a separate variable
-
-        if dim_emb - dim_pe < 0: # formerly 1, but you could have zero feature size
-            raise ValueError(f"PE dim size {dim_pe} is too large for "
-                             f"desired embedding size of {dim_emb}.")
-
-        if expand_x and dim_emb - dim_pe > 0:
-            self.linear_x = nn.Linear(dim_in, dim_emb - dim_pe)
-        self.expand_x = expand_x and dim_emb - dim_pe > 0
-
-        if norm_type == 'batchnorm':
-            self.raw_norm = nn.BatchNorm1d(num_rw_steps)
-        else:
-            self.raw_norm = None
-
-        activation = nn.ReLU  # register.act_dict[cfg.gnn.act]
-        if model_type == 'mlp':
-            layers = []
-            if n_layers == 1:
-                layers.append(nn.Linear(num_rw_steps, dim_pe))
-                layers.append(activation())
-            else:
-                layers.append(nn.Linear(num_rw_steps, 2 * dim_pe))
-                layers.append(activation())
-                for _ in range(n_layers - 2):
-                    layers.append(nn.Linear(2 * dim_pe, 2 * dim_pe))
-                    layers.append(activation())
-                layers.append(nn.Linear(2 * dim_pe, dim_pe))
-                layers.append(activation())
-            self.pe_encoder = nn.Sequential(*layers)
-        elif model_type == 'linear':
-            self.pe_encoder = nn.Linear(num_rw_steps, dim_pe)
-        else:
-            raise ValueError(f"{self.__class__.__name__}: Does not support "
-                             f"'{model_type}' encoder model.")
-
-    def forward(self, batch):
-        pestat_var = f"pestat_{self.kernel_type}"
-        if not hasattr(batch, pestat_var):
-            raise ValueError(f"Precomputed '{pestat_var}' variable is "
-                             f"required for {self.__class__.__name__}; set "
-                             f"config 'posenc_{self.kernel_type}.enable' to "
-                             f"True, and also set 'posenc.kernel.times' values")
-
-        pos_enc = getattr(batch, pestat_var)  # (Num nodes) x (Num kernel times)
-        # pos_enc = batch.rw_landing  # (Num nodes) x (Num kernel times)
-        if self.raw_norm:
-            pos_enc = self.raw_norm(pos_enc)
-        pos_enc = self.pe_encoder(pos_enc)  # (Num nodes) x dim_pe
-
-        # Expand node features if needed
-        if self.expand_x:
-            h = self.linear_x(batch.x)
-        else:
-            h = batch.x
-        # Concatenate final PEs to input embedding
-        batch.x = torch.cat((h, pos_enc), 1)
-        # Keep PE also separate in a variable (e.g. for skip connections to input)
-        if self.pass_as_var:
-            setattr(batch, f'pe_{self.kernel_type}', pos_enc)
-        return batch
 
 
-def compute_eigvec_of_euclidean_dist_matrix(node_feat, pos_enc_dim=32):
-    """Compute positional encoding using graph squared euclidean distance.
-        
-    Args:
-        node_feat = node features tensor with feat_dim=3 (as implemented by Mels)
-    """
-    # Assuming node features are in `node_feat` tensor of shape (B, N, 3)
-    B, N, _ = node_feat.shape
-
-    # Calculate pairwise squared Euclidean distances using torch.cdist
-    eucl_dist_matrix = torch.cdist(node_feat, node_feat, p=2).pow(2)
-    
-    # Eigenvectors
-    eig_val, eig_vec = torch.linalg.eigh(eucl_dist_matrix)
-    eig_vec = torch.flip(eig_vec, dims=[2])
-    
-    pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
-    pos_enc_s = eig_vec[:, :, -pos_enc_dim:]
-   
-    return pos_enc
-
-'''def compute_weighted_adjacency(node_feat, adj):
-    B, N, _ = node_feat.shape
-    weighted_adj = torch.zeros_like(adj)
-
-    for b in range(B):
-        for i in range(N):
-            for j in range(N):
-                if adj[b, i, j] == 1:  # Check if there is an edge between nodes i and j
-                    # Calculate the Euclidean distance between nodes i and j based on their coordinates
-                    eucl_dist = torch.norm(node_feat[b, i] - node_feat[b, j], p=2)
-                    weighted_adj[b, i, j] = eucl_dist
-
-    return weighted_adj
-
-def compute_distance_matrix(weighted_adj):
-    num_nodes = weighted_adj.size(0)
-    cond_dist_matrix = weighted_adj.clone()  # Initialize distance matrix with weighted adjacency matrix
-
-    for k in range(num_nodes):
-        for i in range(num_nodes):
-            for j in range(num_nodes):
-                cond_dist_matrix[i, j] = torch.min(cond_dist_matrix[i, j], cond_dist_matrix[i, k] + cond_dist_matrix[k, j])
-
-    return cond_dist_matrix'''
-
-
-def pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix, pos_enc_dim=32):
-    # Eigenvectors
-    eig_val, eig_vec = torch.linalg.eigh(cond_dist_matrix)
-    eig_vec = torch.flip(eig_vec, dims=[2])
-
-    pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
-   
-    return pos_enc
-
-from numba import njit
-@njit
-def compute_weighted_adjacency(node_feat, adj):
-    N, _ = node_feat.shape
-    weighted_adj = np.zeros_like(adj)
-
-    for i in range(N):
-        for j in range(N):
-            if adj[i, j] == 1:  # Check if there is an edge between nodes i and j
-                # Calculate the Euclidean distance between nodes i and j based on their coordinates
-                #eucl_dist = torch.norm(node_feat[b, i] - node_feat[b, j], p=2)
-                eucl_dist = np.linalg.norm(node_feat[i] - node_feat[j])
-                weighted_adj[i, j] = eucl_dist
-            else:
-                weighted_adj[i, j] = np.inf
-    return weighted_adj
-
-@njit
-def compute_distance_matrix(weighted_adj):
-    num_nodes = weighted_adj.shape[0]
-    cond_dist_matrix = np.copy(weighted_adj)  # Initialize distance matrix with weighted adjacency matrix
-
-    for k in range(num_nodes):
-        for i in range(num_nodes):
-            for j in range(num_nodes):
-                cond_dist_matrix[i, j] = min(cond_dist_matrix[i, j], cond_dist_matrix[i, k] + cond_dist_matrix[k, j])
-
-    return cond_dist_matrix

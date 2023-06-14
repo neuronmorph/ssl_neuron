@@ -214,17 +214,18 @@ def compute_eig_lapl_torch_batch(adj_matrix, pos_enc_dim=32):
     L = torch.eye(n, device=A.device)[None, ].repeat(b, 1, 1) - (N @ A) @ N
 
     # Eigenvectors
-    eig_val, eig_vec = torch.linalg.eigh(L)
-    eig_vec = torch.flip(eig_vec, dims=[2])
+    # eig_val, eig_vec = torch.linalg.eigh(L)
+    # eig_vec = torch.flip(eig_vec, dims=[2])
 
-    pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
-    # take also smallest eig vectors
-    pos_enc_s = eig_vec[:, :, -pos_enc_dim:]
+    # pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
+    # # take also smallest eig vectors
+    # pos_enc_s = eig_vec[:, :, -pos_enc_dim:]
 
-    if pos_enc.size(2) < pos_enc_dim:
-        pos_enc = torch.cat([pos_enc, torch.zeros(pos_enc.size(0), pos_enc.size(1), pos_enc_dim - pos_enc.size(2), device=A.device)], dim=2)
+    # if pos_enc.size(2) < pos_enc_dim:
+    #     pos_enc = torch.cat([pos_enc, torch.zeros(pos_enc.size(0), pos_enc.size(1), pos_enc_dim - pos_enc.size(2), device=A.device)], dim=2)
 
-    return pos_enc
+    # return pos_enc
+    return L
 
 
 def get_leaf_branch_nodes(neighbors):
@@ -480,8 +481,31 @@ def pos_enc_from_eigvec_of_conductive_dist_matrix(node_feat, adj, device, pos_en
     cond_dist_matrix = np.stack(cd, axis=0)
     cond_dist_matrix_torch = torch.from_numpy(cond_dist_matrix).to(device)
     # Eigenvectors
-    eig_val, eig_vec = torch.linalg.eigh(cond_dist_matrix_torch)
-    eig_vec = torch.flip(eig_vec, dims=[2])
+    # eig_val, eig_vec = torch.linalg.eigh(cond_dist_matrix_torch)
+    # eig_vec = torch.flip(eig_vec, dims=[2])
 
-    pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
-    return pos_enc
+    # pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
+    # return pos_enc
+    return cond_dist_matrix_torch
+
+def compute_eigvec_of_euclidean_dist_matrix(node_feat, pos_enc_dim=32):
+    """Compute positional encoding using graph squared euclidean distance.
+        
+    Args:
+        node_feat = node features tensor with feat_dim=3 (as implemented by Mels)
+    """
+    # Assuming node features are in `node_feat` tensor of shape (B, N, 3)
+    B, N, _ = node_feat.shape
+
+    # Calculate pairwise squared Euclidean distances using torch.cdist
+    eucl_dist_matrix = torch.cdist(node_feat, node_feat, p=2).pow(2)
+    
+    # Eigenvectors
+    # eig_val, eig_vec = torch.linalg.eigh(eucl_dist_matrix)
+    # eig_vec = torch.flip(eig_vec, dims=[2])
+    
+    # pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
+    # pos_enc_s = eig_vec[:, :, -pos_enc_dim:]
+   
+    # return pos_enc
+    return eucl_dist_matrix
