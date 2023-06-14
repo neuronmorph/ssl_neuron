@@ -214,10 +214,8 @@ def compute_eig_lapl_torch_batch(adj_matrix, pos_enc_dim=32):
     L = torch.eye(n, device=A.device)[None, ].repeat(b, 1, 1) - (N @ A) @ N
 
     # Eigenvectors
-    #eig_val, eig_vec = torch.linalg.eigh(L)
-    #eig_vec = torch.flip(eig_vec, dims=[2])
-    
-    eig_val, eig_vec = torch.lobpcg(L, k=32)
+    eig_val, eig_vec = torch.linalg.eigh(L)
+    eig_vec = torch.flip(eig_vec, dims=[2])
 
     pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
     # take also smallest eig vectors
@@ -440,3 +438,50 @@ def remove_axon(neighbors, features, soma_id, microns=False):
     soma_id = old2new[soma_id]
 
     return neighbors, features, soma_id
+
+
+from numba import njit
+import numpy as np
+@njit
+def compute_weighted_adjacency(node_feat, adj):
+    N, _ = node_feat.shape
+    weighted_adj = np.zeros_like(adj)
+
+    for i in range(N):
+        for j in range(N):
+            if adj[i, j] == 1:  # Check if there is an edge between nodes i and j
+                # Calculate the Euclidean distance between nodes i and j based on their coordinates
+                #eucl_dist = torch.norm(node_feat[b, i] - node_feat[b, j], p=2)
+                eucl_dist = np.linalg.norm(node_feat[i] - node_feat[j])
+                weighted_adj[i, j] = eucl_dist
+            else:
+                weighted_adj[i, j] = np.inf
+    return weighted_adj
+
+@njit
+def compute_distance_matrix(weighted_adj):
+    num_nodes = weighted_adj.shape[0]
+    cond_dist_matrix = np.copy(weighted_adj)  # Initialize distance matrix with weighted adjacency matrix
+
+    for k in range(num_nodes):
+        for i in range(num_nodes):
+            for j in range(num_nodes):
+                cond_dist_matrix[i, j] = min(cond_dist_matrix[i, j], cond_dist_matrix[i, k] + cond_dist_matrix[k, j])
+
+    return cond_dist_matrix
+
+def pos_enc_from_eigvec_of_conductive_dist_matrix(node_feat, adj, device, pos_enc_dim=32):
+    cd = []
+    for i in range(node_feat.shape[0]):
+        nf = node_feat.numpy()[i]
+        a = adj.numpy()[i]
+        weighted_adj = compute_weighted_adjacency(nf, a)
+        cd.append(compute_distance_matrix(weighted_adj))
+    cond_dist_matrix = np.stack(cd, axis=0)
+    cond_dist_matrix_torch = torch.from_numpy(cond_dist_matrix).to(device)
+    # Eigenvectors
+    eig_val, eig_vec = torch.linalg.eigh(cond_dist_matrix_torch)
+    eig_vec = torch.flip(eig_vec, dims=[2])
+
+    pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
+    return pos_enc

@@ -133,7 +133,7 @@ class GraphTransformer(nn.Module):
 
         self.to_pos_embedding = nn.Linear(pos_dim, dim)
         #self.to_pos_embedding = LinearNodeEncoder(dim)
-        self.pstepPE =  PStepRWEncoding(p=3)
+        #self.pstepPE =  PStepRWEncoding(p=3)
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(dim),
@@ -179,7 +179,7 @@ class GraphTransformer(nn.Module):
         #eucl_dist = compute_eigvec_of_euclidean_dist_matrix(node_feat)
         #pos_embedding_eucl_dist_token = self.to_pos_embedding(eucl_dist)
 
-        cd = []
+        '''cd = []
         for i in range(B):
             nf = node_feat.cpu().numpy()[i]
             a = adj.cpu().numpy()[i]
@@ -188,8 +188,8 @@ class GraphTransformer(nn.Module):
         cond_dist_matrix = np.stack(cd, axis=0)
         cond_dist_matrix_torch = torch.from_numpy(cond_dist_matrix).to('cuda:7')
         
-        cond_dist = pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix_torch)
-        pos_embedding_cond_dist_token = self.to_pos_embedding(cond_dist)
+        cond_dist = pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix_torch)'''
+        #pos_embedding_cond_dist_token = self.to_pos_embedding(cond_dist)
         #print(type(cond_dist_matrix))
 
         # pos_embedding_cond_dist_pretoken = pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix)
@@ -215,11 +215,11 @@ class GraphTransformer(nn.Module):
         pos_embedding = torch.cat((cls_pos_enc, pos_embedding_token), dim=1)
         #pos_embedding_pstep = torch.cat((cls_pos_enc, pos_embedding_pstep_token), dim=1)
         #pos_embedding_eucl_dist = torch.cat((cls_pos_enc, pos_embedding_eucl_dist_token), dim=1)
-        pos_embedding_cond_dist = torch.cat((cls_pos_enc, pos_embedding_cond_dist_token), dim=1)
+        #pos_embedding_cond_dist = torch.cat((cls_pos_enc, pos_embedding_cond_dist_token), dim=1)
         #print('pos embedding', pos_embedding.shape)
 
-        node_degrees = adj.sum(dim=2).unsqueeze(2).expand(-1, -1, 32) 
-        pos_embedding_node_degrees = torch.cat((cls_pos_enc, node_degrees), dim=1)
+        #node_degrees = adj.sum(dim=2).unsqueeze(2).expand(-1, -1, 32) 
+        #pos_embedding_node_degrees = torch.cat((cls_pos_enc, node_degrees), dim=1)
 
         cls_tokens = self.cls_token.repeat(B, 1, 1)
         x = torch.cat((cls_tokens, x), dim=1)
@@ -232,8 +232,8 @@ class GraphTransformer(nn.Module):
         #adj_cls[:, 1:, 1:] = pstepadj
 
         #x += pos_embedding + pos_embedding_pstep + pos_embedding_eucl_dist + pos_embedding_node_degrees
-        x += pos_embedding + pos_embedding_node_degrees + pos_embedding_cond_dist
-        #x += pos_embedding
+        #x += pos_embedding + pos_embedding_node_degrees #+ pos_embedding_cond_dist
+        x += pos_embedding
         for block in self.blocks:
             x = block(x, adj_cls)
         x = x[:, 0]
@@ -567,10 +567,9 @@ def compute_distance_matrix(weighted_adj):
 
 def pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix, pos_enc_dim=32):
     # Eigenvectors
-    #eig_val, eig_vec = torch.linalg.eigh(cond_dist_matrix)
-    #eig_vec = torch.flip(eig_vec, dims=[2])
-    
-    eig_val, eig_vec = torch.lobpcg(L, k=32)
+    eig_val, eig_vec = torch.linalg.eigh(cond_dist_matrix)
+    eig_vec = torch.flip(eig_vec, dims=[2])
+
     pos_enc = eig_vec[:, :, 1:pos_enc_dim + 1]
    
     return pos_enc

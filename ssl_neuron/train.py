@@ -1,9 +1,9 @@
 import os
 import torch
 import torch.optim as optim
-from ssl_neuron.utils import AverageMeter, compute_eig_lapl_torch_batch
+from ssl_neuron.utils import AverageMeter, compute_eig_lapl_torch_batch, pos_enc_from_eigvec_of_conductive_dist_matrix
 
-from torch.profiler import profile, record_function, ProfilerActivity
+#from torch.profiler import profile, record_function, ProfilerActivity
 
 class Trainer(object):
     def __init__(self, config, model, dataloaders):
@@ -56,39 +56,41 @@ class Trainer(object):
     def _train_epoch(self, epoch):
         self.model.train()
         losses = AverageMeter()
-        print('Starting batch')
-        prof = torch.profiler.profile(
-                    activities=[
-        ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        #schedule=torch.profiler.schedule(wait=1, warmup=1, active=1),
-        #on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/mnist'),
-                record_shapes=True
-        #profile_memory=True,
-        #with_stack=True,
-        #with_flops=True,
-        #with_modules=True
-        )    
-        prof.start()
+        # print('Starting batch')
+        # prof = torch.profiler.profile(
+        #             activities=[
+        # ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        # #schedule=torch.profiler.schedule(wait=1, warmup=1, active=1),
+        # #on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/mnist'),
+        #         record_shapes=True
+        # #profile_memory=True,
+        # #with_stack=True,
+        # #with_flops=True,
+        # #with_modules=True
+        # )    
+        # prof.start()
         for i, data in enumerate(self.train_loader, 0):
-            # f1_cpu, f2_cpu, a1, a2 = [x.float() for x in data]
-            # f1, f2, a1, a2 = f1_cpu.to(self.device, non_blocking=True), ...
+            f1_cpu, f2_cpu, a1_cpu, a2_cpu = [x.float() for x in data]
+            f1, f2, a1, a2 = f1_cpu.to(self.device, non_blocking=True), f2_cpu.to(self.device, non_blocking=True), a1_cpu.to(self.device, non_blocking=True), a2_cpu.to(self.device, non_blocking=True),
             f1, f2, a1, a2 = [x.float().to(self.device, non_blocking=True) for x in data]
             n = a1.shape[0]
 
             # compute positional encoding
-            l1 = compute_eig_lapl_torch_batch(a1)
-            l2 = compute_eig_lapl_torch_batch(a2)
+            #l1 = compute_eig_lapl_torch_batch(a1)
+            #l2 = compute_eig_lapl_torch_batch(a2)
             
 
-
+            cd1 = pos_enc_from_eigvec_of_conductive_dist_matrix(f1_cpu, a1_cpu, self.device)
+            cd2 = pos_enc_from_eigvec_of_conductive_dist_matrix(f2_cpu, a2_cpu, self.device)
 
 
             self.lr = self.set_lr()
             self.optimizer.zero_grad(set_to_none=True)
             
             
-            loss = self.model(f1, f2, a1, a2, l1, l2)
-            
+            loss = self.model(f1, f2, a1, a2, cd1, cd2)
+            #loss = self.model(f1, f2, a1, a2, l1, l2)
+
             # optimize 
             loss.sum().backward()
             self.optimizer.step()
@@ -98,9 +100,10 @@ class Trainer(object):
             
             losses.update(loss.detach(), n)
             self.curr_iter += 1
-        prof.step()
-        prof.stop()
-        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+
+        # prof.step()
+        # prof.stop()
+        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
         print('Epoch {} | Loss {:.4f}'.format(epoch, losses.avg))
 
 
