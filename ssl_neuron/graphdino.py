@@ -167,7 +167,12 @@ class GraphTransformer(nn.Module):
         # print('adj:', adj.shape)
         #print('lapl:', lapl.shape)
         # Compute positional encoding
+
+        # Separate the input positional embeddings for conductive distance and lapPE
+        lapl, cond = torch.split(lapl, 32, dim=2)
+
         pos_embedding_token = self.to_pos_embedding(lapl)
+        pos_embedding_cond_dist_token = self.to_pos_embedding(cond)
         #pos_embedding_token = self.to_pos_embedding(node_feat)
         
         
@@ -192,8 +197,7 @@ class GraphTransformer(nn.Module):
         #pos_embedding_cond_dist_token = self.to_pos_embedding(cond_dist)
         #print(type(cond_dist_matrix))
 
-        # pos_embedding_cond_dist_pretoken = pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix)
-        # pos_embedding_cond_dist_token = self.to_pos_embedding(pos_embedding_cond_dist_pretoken)
+        #pos_embedding_cond_dist_pretoken = pos_enc_from_eigvec_of_conductive_dist_matrix(cond_dist_matrix)
 
         #from torch_geometric.nn import GCNConv
         # Define graph convolutional layer
@@ -215,7 +219,7 @@ class GraphTransformer(nn.Module):
         pos_embedding = torch.cat((cls_pos_enc, pos_embedding_token), dim=1)
         #pos_embedding_pstep = torch.cat((cls_pos_enc, pos_embedding_pstep_token), dim=1)
         #pos_embedding_eucl_dist = torch.cat((cls_pos_enc, pos_embedding_eucl_dist_token), dim=1)
-        #pos_embedding_cond_dist = torch.cat((cls_pos_enc, pos_embedding_cond_dist_token), dim=1)
+        pos_embedding_cond_dist = torch.cat((cls_pos_enc, pos_embedding_cond_dist_token), dim=1)
         #print('pos embedding', pos_embedding.shape)
 
         #node_degrees = adj.sum(dim=2).unsqueeze(2).expand(-1, -1, 32) 
@@ -233,7 +237,8 @@ class GraphTransformer(nn.Module):
 
         #x += pos_embedding + pos_embedding_pstep + pos_embedding_eucl_dist + pos_embedding_node_degrees
         #x += pos_embedding + pos_embedding_node_degrees #+ pos_embedding_cond_dist
-        x += pos_embedding
+        #x += pos_embedding
+        x += pos_embedding + pos_embedding_cond_dist
         for block in self.blocks:
             x = block(x, adj_cls)
         x = x[:, 0]

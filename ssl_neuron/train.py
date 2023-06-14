@@ -7,7 +7,7 @@ from ssl_neuron.utils import AverageMeter, compute_eig_lapl_torch_batch, pos_enc
 
 class Trainer(object):
     def __init__(self, config, model, dataloaders):
-        self.device = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
         self.config = config
         self.ckpt_dir = config['trainer']['ckpt_dir']
@@ -76,19 +76,21 @@ class Trainer(object):
             n = a1.shape[0]
 
             # compute positional encoding
-            #l1 = compute_eig_lapl_torch_batch(a1)
-            #l2 = compute_eig_lapl_torch_batch(a2)
+            l1 = compute_eig_lapl_torch_batch(a1)
+            l2 = compute_eig_lapl_torch_batch(a2)
             
 
             cd1 = pos_enc_from_eigvec_of_conductive_dist_matrix(f1_cpu, a1_cpu, self.device)
             cd2 = pos_enc_from_eigvec_of_conductive_dist_matrix(f2_cpu, a2_cpu, self.device)
 
+            l1 = torch.cat((l1, cd1), dim=2)
+            l2 = torch.cat((l2, cd2), dim=2)
 
             self.lr = self.set_lr()
             self.optimizer.zero_grad(set_to_none=True)
             
-            
-            loss = self.model(f1, f2, a1, a2, cd1, cd2)
+            loss = self.model(f1, f2, a1, a2, l1, l2)            
+            #loss = self.model(f1, f2, a1, a2, cd1, cd2)
             #loss = self.model(f1, f2, a1, a2, l1, l2)
 
             # optimize 
