@@ -170,7 +170,7 @@ class GraphDataset(Dataset):
     
     def __getsingleitem__(self, index): 
         cell = self.cells[index]
-        return cell['features'], cell['neighbors'], cell['cell_id'] #cell['soma_id']
+        return cell['features'], cell['neighbors'], cell['soma_id'] #cell['cell_id']
     
     
     def __getitem__(self, index): 

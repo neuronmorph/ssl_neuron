@@ -185,7 +185,7 @@ class GraphTransformer(nn.Module):
         #lapl, cond, eucl = torch.split(lapl, 128, dim=0) #128 is the combined batch size
         #lapl, cond, eucl = torch.split(lapl, 32, dim=2)
         #cond = lapl
-        eucl = lapl
+        #eucl = lapl
         #pos_embedding_token = self.to_pos_embedding(lapl)
         #pos_embedding_cond_dist_token = self.to_pos_embedding(cond)
         #pos_embedding_eucl_dist_token = self.to_pos_embedding(eucl)
@@ -193,7 +193,7 @@ class GraphTransformer(nn.Module):
         
         #pos_embedding_token = self.to_pos_embedding(adj)
         # print('pos token', pos_embedding_token.shape)
-        #pos_embedding_pstep_token = self.pstepPE.forward(node_feat, adj)
+        pos_embedding_pstep_token = self.pstepPE.forward(node_feat, adj)
 
         # Compute positional embedding based on eigvecs of euclidean distance matrix
         #eucl_dist = compute_eigvec_of_euclidean_dist_matrix(node_feat)
@@ -258,7 +258,9 @@ class GraphTransformer(nn.Module):
         #x += pos_embedding + pos_embedding_cond_dist + pos_embedding_pstep + pos_embedding_eucl_dist + pos_embedding_node_degrees
         #x = torch.cat((node_feat, lapl, eucl, cond, pos_embedding_pstep_token), dim=2)
         # x = torch.cat((node_feat, cond), dim=2)
-        x = torch.cat((node_feat, eucl), dim=2)
+        #x = torch.cat((node_feat, eucl), dim=2)
+        
+        x = torch.cat((node_feat, pos_embedding_pstep_token), dim=2)
         x = self.PE(x)
         x = torch.cat((cls_tokens, x), dim=1)
         for block in self.blocks:
@@ -349,7 +351,8 @@ class GraphDINO(nn.Module):
         # Concatenate the two views to compute embeddings as one batch.
         node_feat = torch.cat([node_feat1, node_feat2], dim=0)
         adj = torch.cat([adj1, adj2], dim=0)
-        lapl = torch.cat([lapl1, lapl2], dim=0)
+        #lapl = torch.cat([lapl1, lapl2], dim=0)
+        lapl = 0 # when running only pstepRWPE
 
         _, student_proj = self.student_encoder(node_feat, adj, lapl)
         student_proj1, student_proj2 = torch.split(student_proj, batch_size, dim=0)
@@ -410,7 +413,7 @@ class PStepRWEncoding(nn.Module):
         self.use_edge_attr = use_edge_attr
         #input_dim = int(output_dim*p)
         input_dim = int(3*p) # 3 because xyz 
-        self.mlp = MLP_general(input_dim=input_dim, output_dim=output_dim, hidden_dim=hidden_dim).to(torch.device("cuda:7"))
+        self.mlp = MLP_general(input_dim=input_dim, output_dim=output_dim, hidden_dim=hidden_dim).to(torch.device("cuda:2"))
 
     def forward(self, node_feat, adj): 
         tmp = adj
