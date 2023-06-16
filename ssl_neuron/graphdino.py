@@ -131,9 +131,9 @@ class GraphTransformer(nn.Module):
             AttentionBlock(dim=dim, num_heads=num_heads, mlp_ratio=mlp_ratio, use_exp=use_exp)
             for i in range(depth)])
 
-        self.to_pos_embedding = nn.Linear(pos_dim, dim)
+        #self.to_pos_embedding = nn.Linear(pos_dim, dim)
         #self.to_pos_embedding = LinearNodeEncoder(dim)
-        self.pstepPE =  PStepRWEncoding(p=3)
+        #self.pstepPE =  PStepRWEncoding(p=3)
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(dim),
@@ -193,7 +193,7 @@ class GraphTransformer(nn.Module):
         
         #pos_embedding_token = self.to_pos_embedding(adj)
         # print('pos token', pos_embedding_token.shape)
-        pos_embedding_pstep_token = self.pstepPE.forward(node_feat, adj)
+        #pos_embedding_pstep_token = self.pstepPE.forward(node_feat, adj)
 
         # Compute positional embedding based on eigvecs of euclidean distance matrix
         #eucl_dist = compute_eigvec_of_euclidean_dist_matrix(node_feat)
@@ -259,8 +259,9 @@ class GraphTransformer(nn.Module):
         #x = torch.cat((node_feat, lapl, eucl, cond, pos_embedding_pstep_token), dim=2)
         # x = torch.cat((node_feat, cond), dim=2)
         #x = torch.cat((node_feat, eucl), dim=2)
-        
-        x = torch.cat((node_feat, pos_embedding_pstep_token), dim=2)
+        #x = torch.cat((node_feat, pos_embedding_pstep_token), dim=2)
+
+        x = torch.cat((node_feat, lapl), dim=2)
         x = self.PE(x)
         x = torch.cat((cls_tokens, x), dim=1)
         for block in self.blocks:
@@ -351,8 +352,8 @@ class GraphDINO(nn.Module):
         # Concatenate the two views to compute embeddings as one batch.
         node_feat = torch.cat([node_feat1, node_feat2], dim=0)
         adj = torch.cat([adj1, adj2], dim=0)
-        #lapl = torch.cat([lapl1, lapl2], dim=0)
-        lapl = 0 # when running only pstepRWPE
+        lapl = torch.cat([lapl1, lapl2], dim=0)
+        #lapl = 0 # when running only pstepRWPE
 
         _, student_proj = self.student_encoder(node_feat, adj, lapl)
         student_proj1, student_proj2 = torch.split(student_proj, batch_size, dim=0)

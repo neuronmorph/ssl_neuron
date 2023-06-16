@@ -72,13 +72,13 @@ class Trainer(object):
         # prof.start()
         for i, data in enumerate(self.train_loader, 0):
             f1_cpu, f2_cpu, a1_cpu, a2_cpu = [x.float() for x in data]
-            f1, f2, a1, a2 = f1_cpu.to(self.device, non_blocking=True), f2_cpu.to(self.device, non_blocking=True), a1_cpu.to(self.device, non_blocking=True), a2_cpu.to(self.device, non_blocking=True),
-            f1, f2, a1, a2 = [x.float().to(self.device, non_blocking=True) for x in data]
+            f1, f2, a1, a2 = f1_cpu.to(self.device, non_blocking=True), f2_cpu.to(self.device, non_blocking=True), a1_cpu.to(self.device, non_blocking=True), a2_cpu.to(self.device, non_blocking=True)
+            #f1, f2, a1, a2 = [x.float().to(self.device, non_blocking=True) for x in data]
             n = a1.shape[0]
 
             # compute positional encoding
-            #l1 = compute_eig_lapl_torch_batch(a1)
-            #l2 = compute_eig_lapl_torch_batch(a2)
+            l1 = compute_eig_lapl_torch_batch(a1)
+            l2 = compute_eig_lapl_torch_batch(a2)
             
 
             #cd1 = pos_enc_from_eigvec_of_conductive_dist_matrix(f1_cpu, a1_cpu, self.device)
@@ -102,22 +102,22 @@ class Trainer(object):
             #l1 = ed1
             #l2 = ed2
 
-            # eig_val1, eig_vec1 = torch.linalg.eigh(l1)
-            # eig_val2, eig_vec2 = torch.linalg.eigh(l2)
+            eig_val1, eig_vec1 = torch.linalg.eigh(l1)
+            eig_val2, eig_vec2 = torch.linalg.eigh(l2)
 
-            # eig_vec1 = torch.flip(eig_vec1, dims=[2])
-            # eig_vec2 = torch.flip(eig_vec2, dims=[2])
+            eig_vec1 = torch.flip(eig_vec1, dims=[2])
+            eig_vec2 = torch.flip(eig_vec2, dims=[2])
 
-            # pos_enc_dim = 32
-            # pos_enc1 = eig_vec1[:, :, 1:pos_enc_dim + 1]
-            # pos_enc2 = eig_vec2[:, :, 1:pos_enc_dim + 1]
+            pos_enc_dim = 32
+            pos_enc1 = eig_vec1[:, :, 1:pos_enc_dim + 1]
+            pos_enc2 = eig_vec2[:, :, 1:pos_enc_dim + 1]
 
-            pos_enc1 = 0 #pstepRWPE only
-            pos_enc2 = 0 #pstepRWPE only
+            # pos_enc1 = 0 #pstepRWPE only
+            # pos_enc2 = 0 #pstepRWPE only
 
             self.lr = self.set_lr()
             self.optimizer.zero_grad(set_to_none=True)
-            
+
             loss = self.model(f1, f2, a1, a2, pos_enc1, pos_enc2)
             #loss = self.model(f1, f2, a1, a2, l1, l2)            
             #loss = self.model(f1, f2, a1, a2, cd1, cd2)
