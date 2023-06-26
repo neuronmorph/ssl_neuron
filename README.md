@@ -1,4 +1,26 @@
-# Self-supervised Representation Learning of Neuronal Morphologies
+# Positional Embeddings for GraphDINO
+
+This repository contains different positional embeddings for GraphDINO. Positional embeddings are organized by tags:
+pstepRWPE+euclPE  - p-step random walk matrix and eigenvectors of euclidean distance matrix
+lapPE_only  - eigenvectros of Laplacian matrix
+pstepRWPE_only - p-step random walk matrix
+eucl_disPE_only - eigenvectors of euclidean distance matrix
+cond_distPE_only - eigenvectors of conductance distance matrix
+allPE - all above positional embeddings combined
+with_cond_dist_in_GT - includes the previous version of positional embeddings, which were summed to node features instead of concatenating. Disregard this tag.
+
+## Run inference
+For model inference use Checkpoints_visualized.ipynb. 
+1. Load the corresponding code using the tags above. 
+2. Select the correct config file and change the paths to checkpoint files
+3. Uncomment the cell with the positional embedding(s)
+4. Change the CUDA device number in train.py line 10 to "cuda:0"; and in graphdino.py line 418 to "cuda:0"
+5. Run the notebook. It will give accuracy score, confusion matrix, and t-SNE clustering
+
+## Model weights
+Model weights are located in ckpts folder with the corresponding names 
+
+## Self-supervised Representation Learning of Neuronal Morphologies
 
 This repository contains code to the paper [Self-supervised Representation Learning of Neuronal Morphologies](https://arxiv.org/abs/2112.12482) by M.A. Weis, L. Pede, T. Lüddecke and A.S. Ecker (2021).
 
