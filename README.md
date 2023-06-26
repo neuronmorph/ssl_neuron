@@ -1,13 +1,13 @@
 # Positional Embeddings for GraphDINO
 
 This repository contains different positional embeddings for GraphDINO. Positional embeddings are organized by tags:
-pstepRWPE+euclPE  - p-step random walk matrix and eigenvectors of euclidean distance matrix
-lapPE_only  - eigenvectros of Laplacian matrix
-pstepRWPE_only - p-step random walk matrix
-eucl_disPE_only - eigenvectors of euclidean distance matrix
-cond_distPE_only - eigenvectors of conductance distance matrix
-allPE - all above positional embeddings combined
-with_cond_dist_in_GT - includes the previous version of positional embeddings, which were summed to node features instead of concatenating. Disregard this tag.
+1. pstepRWPE+euclPE  - p-step random walk matrix and eigenvectors of euclidean distance matrix
+2. lapPE_only  - eigenvectros of Laplacian matrix
+3. pstepRWPE_only - p-step random walk matrix
+4. eucl_disPE_only - eigenvectors of euclidean distance matrix
+5. cond_distPE_only - eigenvectors of conductance distance matrix
+6. allPE - all above positional embeddings combined
+7. with_cond_dist_in_GT - includes the previous version of positional embeddings, which were summed to node features instead of concatenating. Disregard this tag.
 
 ## Run inference
 For model inference use Checkpoints_visualized.ipynb. 
