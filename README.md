@@ -1,6 +1,7 @@
 # Positional Embeddings for GraphDINO
 
-This repository contains different positional embeddings for GraphDINO. Positional embeddings are organized by tags:
+This repository contains different positional embeddings for GraphDINO, that I have implemented during my lab rotation. 
+Positional embeddings are organized by tags:
 1. pstepRWPE+euclPE  - p-step random walk matrix and eigenvectors of euclidean distance matrix
 2. lapPE_only  - eigenvectros of Laplacian matrix
 3. pstepRWPE_only - p-step random walk matrix
